@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+**/.venv/
+**/venv/
+
+# Environment
+.env
+.env.local
+
+# Project outputs
+weights/
+features/
+runs/
+yolo_dataset/
+raw_data/annotations.csv
+raw_data/split.json
