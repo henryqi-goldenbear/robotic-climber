@@ -9,3 +9,4 @@ opencv-python-headless
 joblib
 tqdm
 omegaconf
+python-dotenv
