@@ -18,6 +18,7 @@ def _summary(values: list[float]) -> str:
 
 def main() -> None:
     df = load_annotations()
+    background_files = set(df.loc[df["is_background"], "filename"])
     split = json.loads(config.SPLIT_FILE.read_text())
     train, val = set(split["train"]), set(split["val"])
     all_split_files = train | val
@@ -83,12 +84,17 @@ def main() -> None:
         labels = [p for p in label_dir.rglob("*.txt") if p.is_file()]
         missing, malformed = [], []
         for image_path in images:
-            relative = image_path.relative_to(image_dir).with_suffix(".txt")
+            source_file = image_path.relative_to(image_dir).as_posix()
+            relative = Path(source_file).with_suffix(".txt")
             label_path = label_dir / relative
             if not label_path.is_file():
                 missing.append(str(relative))
                 continue
             lines = label_path.read_text().strip().splitlines()
+            if source_file in background_files:
+                if lines:
+                    malformed.append(f"{relative}: background label must be empty")
+                continue
             if len(lines) != 1:
                 malformed.append(f"{relative}: expected 1 line, got {len(lines)}")
                 continue

@@ -93,6 +93,10 @@ def main() -> None:
         return
 
     if os.getenv("DIAGNOSTICS_ONLY") == "1":
+        # Diagnostics calls YOLO's validator, which reads data.yaml. Rebuild
+        # it in the current mount so it cannot retain a local Windows path.
+        run("data_prep/make_splits.py")
+        run("data_prep/build_yolo_dataset.py")
         run("diagnose_pipeline.py")
         return
 
@@ -102,9 +106,9 @@ def main() -> None:
 
     # Regenerate these in the Linux mount. In particular, data.yaml must not
     # retain an absolute Windows path created by a local dataset build.
-    #run("data_prep/make_splits.py")
-    #run("data_prep/build_yolo_dataset.py")
-    #run("train_detector.py")
+    run("data_prep/make_splits.py")
+    run("data_prep/build_yolo_dataset.py")
+    run("train_detector.py")
     run("data_prep/build_classifier_dataset.py")
     run("train_classifier.py")
     run("evaluate.py")

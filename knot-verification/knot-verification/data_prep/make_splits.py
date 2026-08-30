@@ -8,7 +8,7 @@ Expected input: raw_data/annotations.csv with columns:
     filename, x1, y1, x2, y2, label
 
 - x1,y1,x2,y2: absolute pixel coordinates of the knot bounding box
-- label: "correct"/"incorrect" (or 1/0)
+- label: "correct"/"incorrect" (or 1/0), or "none" for a no-knot image
 
 See raw_data/annotations_SCHEMA_EXAMPLE.csv for a worked example.
 Adapt `load_annotations()` below if your dataset uses a different schema
@@ -79,9 +79,19 @@ def load_annotations() -> pd.DataFrame:
     else:
         df = pd.read_csv(config.ANNOTATIONS_CSV)
 
-    label_map = {"correct": 1, "incorrect": 0, "1": 1, "0": 0, 1: 1, 0: 0}
-    df["label"] = df["label"].astype(str).str.lower().map(lambda v: label_map.get(v, v))
-    df["label"] = df["label"].astype(int)
+    label_text = df["label"].astype(str).str.strip().str.lower()
+    label_map = {"correct": 1, "incorrect": 0, "1": 1, "0": 0}
+    df["is_background"] = label_text.eq("none")
+    df["label"] = label_text.map(label_map).astype("Int64")
+    invalid_labels = ~df["is_background"] & df["label"].isna()
+    if invalid_labels.any():
+        values = sorted(label_text[invalid_labels].unique())
+        raise ValueError(f"Unsupported annotation labels: {values}. Use correct, incorrect, or none.")
+    for column in ("x1", "y1", "x2", "y2"):
+        df[column] = pd.to_numeric(df[column], errors="coerce")
+    invalid_boxes = ~df["is_background"] & df[["x1", "y1", "x2", "y2"]].isna().any(axis=1)
+    if invalid_boxes.any():
+        raise ValueError("Knot annotations require x1, y1, x2, and y2 coordinates.")
     return df
 
 
@@ -90,12 +100,13 @@ def main():
 
     df = load_annotations()
     print(f"Loaded {len(df)} annotated images "
-          f"({(df.label == 1).sum()} correct / {(df.label == 0).sum()} incorrect)")
+          f"({(df.label == 1).sum()} correct / {(df.label == 0).sum()} incorrect / "
+          f"{df.is_background.sum()} no-knot backgrounds)")
 
     train_files, val_files = train_test_split(
         df["filename"].tolist(),
         test_size=1 - config.TRAIN_VAL_SPLIT,
-        stratify=df["label"],
+        stratify=df["label"].astype("string").fillna("none"),
         random_state=config.RANDOM_SEED,
     )
 

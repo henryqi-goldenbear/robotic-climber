@@ -64,6 +64,10 @@ def main():
     features, labels, filenames, splits = [], [], [], []
 
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Extracting DINOv2 features"):
+        # Backgrounds train YOLO only; they have no knot crop for the
+        # correct/incorrect classifier.
+        if row.is_background:
+            continue
         img_path = config.RAW_IMAGES_DIR / row["filename"]
         if not img_path.exists() or row["filename"] not in file_to_split:
             continue
