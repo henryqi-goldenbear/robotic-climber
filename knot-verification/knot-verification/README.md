@@ -55,8 +55,11 @@ from that one function, so it's the only place you need to adapt.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
+
+On Windows, the repository-level `setup_windows.ps1` script performs the full
+Python, Playwright, and LiveKit CLI installation automatically.
 
 ## Full workflow
 
@@ -81,6 +84,74 @@ python evaluate.py
 python run_on_image.py --image raw_data/images/figure8_0001.jpg
 python edge_camera_loop.py
 ```
+
+## LiveKit robot transport
+
+The LiveKit integration keeps detection and classification onboard the robot
+and sends only annotated video and small telemetry frames over the network.
+This lets the knot-safety loop continue locally when a satellite link becomes
+slow or unavailable.
+
+For a local server on Windows, start the localhost-only Compose service from
+the repository root:
+
+```powershell
+docker compose -f compose.livekit.yml up -d
+docker compose -f compose.livekit.yml ps
+```
+
+The checked-in Compose service exposes LiveKit only on `127.0.0.1` and uses
+LiveKit's documented development credentials. The ignored `.env.livekit` is
+already configured for this server, and both Python clients load it
+automatically without overriding values exported by the shell.
+
+Stop the local server with:
+
+```powershell
+docker compose -f compose.livekit.yml down
+```
+
+For LiveKit Cloud or a production self-hosted server, copy
+`.env.livekit.example` to `.env.livekit`, replace its URL, and prefer separately
+minted, least-privilege `LIVEKIT_TOKEN` and `LIVEKIT_OPERATOR_TOKEN` values.
+Only trusted development machines should mint tokens from
+`LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
+
+Start the robot:
+
+```bash
+python livekit_robot.py --room himalaya --camera-index 0
+```
+
+The defaults publish 1280x720 video at 15 FPS and 1.5 Mbps. On a constrained
+satellite connection, lower `--max-bitrate`, `--fps`, and resolution. The
+video track carries capture timestamps and frame IDs. `robot.telemetry` is a
+lossy data track with a one-frame operator buffer so stale inference does not
+queue behind current state.
+
+Monitor telemetry, request an immediate inspection, and save one received
+video frame:
+
+```bash
+python livekit_operator.py --command status --monitor-seconds 30
+python livekit_operator.py --command inspect_now
+python livekit_operator.py --snapshot robot-frame.jpg --monitor-seconds 0
+```
+
+The robot authorizes one configured operator identity and exposes only:
+
+- `status`
+- `inspect_now`
+- `pause_inference`
+- `resume_inference`
+
+It does not accept arbitrary actuator commands. Any future motion integration
+must add a hardware emergency stop, command deadlines, a dead-man watchdog,
+local speed/position limits, and a control lease. LiveKit transport security
+does not replace those physical safety systems.
+
+For a visual operator console, join the same room with a LiveKit frontend or
+sandbox and subscribe to the `robot.camera` track.
 
 ## A few design choices worth knowing about
 

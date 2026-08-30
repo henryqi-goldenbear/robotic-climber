@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Avalanche Intelligence · Summit Guardian{% endblock %}
+{% block main_class %}container-fluid p-0{% endblock %}
+
+{% block content %}
+<section class="avalanche-hero">
+  <div class="avalanche-contours"></div>
+  <div class="container-fluid px-lg-5 position-relative">
+    <div class="row align-items-end g-4">
+      <div class="col-lg-8">
+        <div class="eyebrow"><span class="eyebrow-line amber-line"></span> TERRAIN INTELLIGENCE</div>
+        <h1>Read the slope<br /><span class="amber-text">before the slope moves.</span></h1>
+        <p>
+          Summit Guardian turns dated Sierra Avalanche Center products,
+          weather-station observations, and snowpack signals into an
+          inspectable research model for terrain-risk decision support.
+        </p>
+      </div>
+      <div class="col-lg-4">
+        <div class="research-boundary">
+          <i class="bi bi-exclamation-triangle"></i>
+          <div>
+            <strong>Research prototype</strong>
+            <span>Official avalanche forecasts remain authoritative.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-shell avalanche-dashboard">
+  <div class="container-fluid px-lg-5">
+    <div class="avalanche-stat-grid">
+      <div class="avalanche-stat">
+        <span>OBSERVATION WINDOW</span>
+        <strong>{{ avalanche.samples }}</strong>
+        <small>dated terrain observations</small>
+      </div>
+      <div class="avalanche-stat">
+        <span>MODEL INPUT</span>
+        <strong class="text-cyan">{{ avalanche.numeric_features }}</strong>
+        <small>numeric weather + snow signals</small>
+      </div>
+      <div class="avalanche-stat">
+        <span>OFFICIAL-ONLY HOLDOUT</span>
+        <strong class="amber-text">{{ avalanche.official_accuracy }}%</strong>
+        <small>accuracy across {{ avalanche.official_holdout_samples }} official samples</small>
+      </div>
+      <div class="avalanche-stat">
+        <span>TIME-AWARE TEST</span>
+        <strong>{{ avalanche.holdout_samples }}</strong>
+        <small>chronologically later dates</small>
+      </div>
+    </div>
+
+    <div class="row g-4 mt-2">
+      <div class="col-xl-8">
+        <div class="glass-panel avalanche-chart-panel">
+          <div class="chart-heading">
+            <div>
+              <span class="micro-label text-cyan">CHRONOLOGICAL HOLDOUT</span>
+              <h2>Actual risk vs. model signal</h2>
+            </div>
+            <div class="risk-legend">
+              <span><i class="actual-line"></i>Actual</span>
+              <span><i class="predicted-line"></i>Predicted</span>
+            </div>
+          </div>
+          <div class="chart-frame"><canvas id="riskTimeline"></canvas></div>
+          <div class="chart-caption">
+            Dates run left-to-right from {{ avalanche.predictions[0].date }} to
+            {{ avalanche.predictions[-1].date }}. Hollow points indicate labels
+            imputed by the dataset policy rather than official SAC ratings.
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xl-4">
+        <div class="glass-panel avalanche-chart-panel h-100">
+          <div class="chart-heading">
+            <div>
+              <span class="micro-label text-cyan">TRAINING COVERAGE</span>
+              <h2>Risk distribution</h2>
+            </div>
+          </div>
+          <div class="chart-frame distribution-frame"><canvas id="riskDistribution"></canvas></div>
+          <div class="model-chip">
+            <i class="bi bi-cpu"></i>
+            <div><span>Selected model</span><strong>{{ avalanche.selected_model }}</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-shell avalanche-pipeline">
+  <div class="container-fluid px-lg-5">
+    <div class="section-heading">
+      <div>
+        <span class="micro-label amber-text">FROM CONDITIONS TO CONTEXT</span>
+        <h2>An auditable terrain pipeline.</h2>
+      </div>
+      <p>Every output preserves the date, source policy, actual label, predicted label, and probability distribution.</p>
+    </div>
+    <div class="terrain-flow">
+      {% for number, title, copy, icon in [
+        ('01', 'Collect', 'Dated forecasts, weather stations, and snowpack observations.', 'bi-cloud-snow'),
+        ('02', 'Structure', 'Aggregate 773 numeric signals without looking into future dates.', 'bi-braces'),
+        ('03', 'Evaluate', 'Train first, then hold out the chronologically latest observations.', 'bi-calendar2-check'),
+        ('04', 'Communicate', 'Show uncertainty and preserve the official-forecast boundary.', 'bi-shield-exclamation')
+      ] %}
+      <div class="terrain-step">
+        <span>{{ number }}</span>
+        <i class="bi {{ icon }}"></i>
+        <h3>{{ title }}</h3>
+        <p>{{ copy }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const riskRows = {{ avalanche.predictions | tojson }};
+const riskScale = {
+  1: 'Low',
+  2: 'Moderate',
+  3: 'Considerable',
+  4: 'High'
+};
+
+new Chart(document.getElementById('riskTimeline'), {
+  type: 'line',
+  data: {
+    labels: riskRows.map(row => row.date.slice(5)),
+    datasets: [
+      {
+        label: 'Actual',
+        data: riskRows.map(row => row.actual_numeric),
+        borderColor: '#f4fbff',
+        backgroundColor: '#f4fbff',
+        pointBackgroundColor: riskRows.map(row => row.official ? '#f4fbff' : '#071019'),
+        pointBorderColor: '#f4fbff',
+        borderWidth: 2,
+        pointRadius: 4,
+        tension: 0.25
+      },
+      {
+        label: 'Predicted',
+        data: riskRows.map(row => row.predicted_numeric),
+        borderColor: '#f2b84b',
+        backgroundColor: '#f2b84b',
+        borderDash: [7, 5],
+        borderWidth: 2,
+        pointRadius: 3,
+        tension: 0.25
+      }
+    ]
+  },
+  options: {
+    maintainAspectRatio: false,
+    interaction: { intersect: false, mode: 'index' },
+    plugins: { legend: { display: false } },
+    scales: {
+      x: {
+        grid: { color: 'rgba(164,214,228,.06)' },
+        ticks: { color: '#708894', maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }
+      },
+      y: {
+        min: 1,
+        max: 4,
+        grid: { color: 'rgba(164,214,228,.10)' },
+        ticks: { color: '#8fa7b4', stepSize: 1, callback: value => riskScale[value] }
+      }
+    }
+  }
+});
+
+new Chart(document.getElementById('riskDistribution'), {
+  type: 'bar',
+  data: {
+    labels: {{ avalanche.target_distribution.keys() | list | tojson }},
+    datasets: [{
+      data: {{ avalanche.target_distribution.values() | list | tojson }},
+      backgroundColor: ['#70e6a0', '#f2b84b', '#ff8a65', '#ff6b6b'],
+      borderWidth: 0,
+      borderRadius: 5
+    }]
+  },
+  options: {
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#8fa7b4' } },
+      y: { grid: { color: 'rgba(164,214,228,.08)' }, ticks: { color: '#708894' } }
+    }
+  }
+});
+</script>
+{% endblock %}

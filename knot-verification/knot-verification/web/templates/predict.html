@@ -37,16 +37,17 @@
       </div>
     </div>
 
-    <!-- Pipeline note -->
     <div class="card bg-secondary-subtle border-secondary mt-3">
       <div class="card-body small text-secondary">
-        <i class="bi bi-info-circle me-1 text-info"></i>
-        <strong class="text-light">Note:</strong>
-        The detector weights (<code>knot_detector.pt</code>) are not yet trained.
-        This demo runs the <strong>DINOv2 + SVM classifier</strong> directly on the uploaded image
-        (resized to 224 × 224), skipping the YOLO crop step.
-        Train the full pipeline with <code>python run_training_pipeline.py</code> to enable
-        end-to-end detection + classification.
+    <i class="bi bi-info-circle me-1 text-info"></i>
+    {% if stats is defined and stats.detector_exists %}
+      <strong class="text-light">Full pipeline active:</strong>
+      YOLOv10-N detects the knot region (box shown in yellow), then DINOv2 + SVM classifies the crop.
+    {% else %}
+      <strong class="text-light">Note:</strong>
+      The detector weights are missing. Running DINOv2 + SVM on the full image.
+      Download weights or run <code>python run_training_pipeline.py</code>.
+    {% endif %}
       </div>
     </div>
   </div>
@@ -54,9 +55,29 @@
   <!-- Result -->
   <div class="col-md-7">
     {% if result %}
-    <div class="card bg-secondary-subtle border-{% if result.label=='Correct' %}success{% else %}danger{% endif %} h-100">
-      <div class="card-header fw-semibold border-secondary">Prediction result</div>
+    <div class="card bg-secondary-subtle border-{% if result.no_detection %}warning{% elif result.label=='Correct' %}success{% else %}danger{% endif %} h-100">
+      <div class="card-header fw-semibold border-secondary d-flex justify-content-between align-items-center">
+        <span>Prediction result</span>
+        {% if result.detector_used %}
+          {% if result.no_detection %}
+            <span class="badge bg-warning text-dark"><i class="bi bi-search me-1"></i>No knot detected</span>
+          {% else %}
+            <span class="badge bg-secondary">
+              <i class="bi bi-bounding-box me-1"></i>Det. conf {{ result.det_conf }}%
+            </span>
+          {% endif %}
+        {% else %}
+          <span class="badge bg-secondary">Classifier only</span>
+        {% endif %}
+      </div>
       <div class="card-body">
+        {% if result.no_detection %}
+          <div class="text-center py-3">
+            <i class="bi bi-search text-warning display-4"></i>
+            <div class="fs-5 fw-bold text-warning mt-2">No knot detected</div>
+            <div class="text-secondary small mt-1">Nothing cleared the confidence threshold ({{ result.det_conf }}%). Try a closer photo.</div>
+          </div>
+        {% else %}
         <div class="row g-3">
           <div class="col-6">
             <div class="text-center mb-3">
@@ -94,14 +115,25 @@
           <div class="col-6 text-center">
             {% if thumb_b64 %}
             <div class="mb-2">
-              <div class="small text-secondary mb-1">Uploaded image</div>
+              <div class="small text-secondary mb-1">
+                {% if result.detector_used and not result.no_detection %}Detected box (yellow){% else %}Uploaded image{% endif %}
+              </div>
               <img src="data:image/jpeg;base64,{{ thumb_b64 }}"
                    class="img-fluid rounded border border-secondary"
                    style="max-height:200px" alt="uploaded" />
             </div>
             {% endif %}
+            {% if crop_b64 and result.detector_used and not result.no_detection %}
+            <div>
+              <div class="small text-secondary mb-1">Knot crop fed to classifier</div>
+              <img src="data:image/jpeg;base64,{{ crop_b64 }}"
+                   class="img-fluid rounded border border-secondary"
+                   style="max-height:100px" alt="crop" />
+            </div>
+            {% endif %}
           </div>
         </div>
+        {% endif %}
       </div>
     </div>
     {% else %}

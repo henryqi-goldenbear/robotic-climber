@@ -1,170 +1,244 @@
 {% extends "base.html" %}
-{% block title %}Knot Verification — Overview{% endblock %}
+{% block title %}Summit Guardian · Mission Control{% endblock %}
+{% block main_class %}container-fluid p-0{% endblock %}
 
 {% block content %}
-<div class="row g-4 mb-4">
-  <div class="col-12">
-    <h1 class="fw-bold mb-1">
-      <i class="bi bi-shield-check text-success me-2"></i>Knot Verification Pipeline
-    </h1>
-    <p class="text-secondary mb-0">
-      Climbing-knot safety classifier · YOLOv10-N detect &amp; crop → DINOv2-Small frozen features → Linear SVM
-    </p>
-  </div>
-</div>
-
-<!-- Stat cards -->
-<div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
-    <div class="card bg-secondary-subtle border-secondary h-100">
-      <div class="card-body text-center">
-        <div class="display-5 fw-bold text-info">{{ stats.total }}</div>
-        <div class="text-secondary small mt-1">Total images</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card bg-secondary-subtle border-secondary h-100">
-      <div class="card-body text-center">
-        <div class="display-5 fw-bold text-success">{{ stats.n_correct }}</div>
-        <div class="text-secondary small mt-1">Correct knots</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card bg-secondary-subtle border-secondary h-100">
-      <div class="card-body text-center">
-        <div class="display-5 fw-bold text-danger">{{ stats.n_incorrect }}</div>
-        <div class="text-secondary small mt-1">Incorrect knots</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card bg-secondary-subtle border-secondary h-100">
-      <div class="card-body text-center">
-        <div class="display-5 fw-bold text-warning">{{ stats.n_val }}</div>
-        <div class="text-secondary small mt-1">Validation images</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Pipeline diagram + label doughnut -->
-<div class="row g-4 mb-4">
-  <div class="col-md-7">
-    <div class="card bg-secondary-subtle border-secondary h-100">
-      <div class="card-header fw-semibold border-secondary">
-        <i class="bi bi-diagram-3 me-2"></i>Pipeline
-      </div>
-      <div class="card-body">
-        <div class="d-flex align-items-center flex-wrap gap-2 my-2 justify-content-center">
-          {% set stages = [
-            ('bi-camera', 'Frame', 'secondary'),
-            ('bi-arrow-right', '', 'secondary'),
-            ('bi-bounding-box', 'YOLOv10-N\nDetect + Crop', 'primary'),
-            ('bi-arrow-right', '', 'secondary'),
-            ('bi-grid-3x3-gap', 'DINOv2-Small\nFeatures', 'info'),
-            ('bi-arrow-right', '', 'secondary'),
-            ('bi-cpu', 'Linear SVM\nClassify', 'warning'),
-            ('bi-arrow-right', '', 'secondary'),
-            ('bi-check-circle', 'Correct / Incorrect', 'success'),
-          ] %}
-          {% for icon, label, color in stages %}
-            {% if label == '' %}
-              <i class="bi {{ icon }} text-{{ color }}"></i>
-            {% else %}
-              <div class="text-center px-2">
-                <div class="rounded p-2 border border-{{ color }} mb-1 bg-dark">
-                  <i class="bi {{ icon }} text-{{ color }} fs-4"></i>
-                </div>
-                <div class="small text-{{ color }}" style="white-space:pre-line;line-height:1.2">{{ label }}</div>
-              </div>
-            {% endif %}
-          {% endfor %}
+<section class="hero-section" id="mission">
+  <div class="hero-grid"></div>
+  <div class="mountain mountain-back"></div>
+  <div class="mountain mountain-front"></div>
+  <div class="container-fluid px-lg-5 position-relative hero-content">
+    <div class="row align-items-center g-5">
+      <div class="col-lg-7">
+        <div class="eyebrow reveal-item">
+          <span class="eyebrow-line"></span> AUTONOMOUS MOUNTAIN SAFETY
         </div>
+        <h1 class="hero-title reveal-item">
+          Before the next move,<br />
+          <span class="text-gradient">know the mountain.</span>
+        </h1>
+        <p class="hero-copy reveal-item">
+          A robotic climbing companion that sees rope-system failures, interprets
+          changing terrain risk, and keeps critical intelligence moving when
+          connectivity cannot be trusted.
+        </p>
+        <div class="d-flex flex-wrap gap-3 reveal-item">
+          <a class="btn btn-summit btn-lg" href="{{ url_for('predict') }}">
+            <i class="bi bi-eye-fill me-2"></i>Launch vision check
+          </a>
+          <button class="btn btn-outline-light btn-lg" id="guidedDemo" type="button">
+            <i class="bi bi-play-fill me-2"></i>Start guided demo
+          </button>
+          <a class="btn btn-outline-warning btn-lg" href="{{ url_for('avalanche') }}">
+            <i class="bi bi-snow2 me-2"></i>Explore avalanche risk
+          </a>
+        </div>
+        <div class="hero-proof reveal-item">
+          <div><strong>{{ stats.total }}</strong><span>annotated rope images</span></div>
+          {% if demo.avalanche %}
+          <div><strong>{{ demo.avalanche.samples }}</strong><span>terrain observation days</span></div>
+          <div><strong>{{ demo.avalanche.numeric_features }}</strong><span>weather + snow signals</span></div>
+          {% endif %}
+          <div><strong>1</strong><span>edge-first safety loop</span></div>
+        </div>
+      </div>
 
-        <hr class="border-secondary" />
-        <div class="row text-center small text-secondary">
-          <div class="col">
-            <div class="fw-semibold text-light">Detector</div>
-            {% if stats.detector_exists %}
-              <span class="badge bg-success">weights loaded</span>
-            {% else %}
-              <span class="badge bg-secondary">not trained yet</span>
-            {% endif %}
+      <div class="col-lg-5">
+        <div class="mission-card glass-panel reveal-item" id="systemStatus">
+          <div class="mission-card-header">
+            <div>
+              <span class="micro-label">MISSION</span>
+              <h2>Himalaya Traverse 01</h2>
+            </div>
+            <span class="live-badge"><span class="pulse-ring"></span> LIVE</span>
           </div>
-          <div class="col">
-            <div class="fw-semibold text-light">Classifier</div>
-            {% if stats.classifier_exists %}
-              <span class="badge bg-success">weights loaded</span>
-            {% else %}
-              <span class="badge bg-secondary">not trained yet</span>
-            {% endif %}
+          <div class="route-visual">
+            <div class="route-line">
+              <span class="route-node node-base"></span>
+              <span class="route-node node-mid"></span>
+              <span class="route-node node-summit"></span>
+              <span class="climber-marker"><i class="bi bi-robot"></i></span>
+            </div>
+            <div class="altitude-label altitude-high">6,420 m</div>
+            <div class="altitude-label altitude-mid">5,870 m</div>
+            <div class="altitude-label altitude-low">Base link</div>
+          </div>
+          <div class="system-readouts">
+            <div class="readout">
+              <span class="readout-icon cyan"><i class="bi bi-camera-video"></i></span>
+              <div><span>Knot vision</span><strong id="visionState">Checking...</strong></div>
+            </div>
+            <div class="readout">
+              <span class="readout-icon amber"><i class="bi bi-broadcast-pin"></i></span>
+              <div><span>LiveKit room</span><strong id="livekitState">Checking...</strong></div>
+            </div>
+            <div class="readout">
+              <span class="readout-icon green"><i class="bi bi-cpu"></i></span>
+              <div><span>Safety inference</span><strong>On device</strong></div>
+            </div>
+            <div class="readout">
+              <span class="readout-icon amber"><i class="bi bi-snow2"></i></span>
+              <div><span>Terrain model</span><strong id="terrainState">Checking...</strong></div>
+            </div>
+          </div>
+          <div class="last-sync">
+            <i class="bi bi-shield-check"></i>
+            <span>Safety loop remains local if the uplink drops.</span>
           </div>
         </div>
       </div>
     </div>
   </div>
+</section>
 
-  <div class="col-md-5">
-    <div class="card bg-secondary-subtle border-secondary h-100">
-      <div class="card-header fw-semibold border-secondary">
-        <i class="bi bi-pie-chart me-2"></i>Label distribution
+<section class="section-shell" id="intelligence">
+  <div class="container-fluid px-lg-5">
+    <div class="section-heading">
+      <div>
+        <span class="micro-label text-cyan">THE SAFETY STACK</span>
+        <h2>Three signals. One confident decision.</h2>
       </div>
-      <div class="card-body d-flex align-items-center justify-content-center">
-        <canvas id="labelChart" style="max-height:220px"></canvas>
+      <p>Each layer answers a different question before the robot or climber commits.</p>
+    </div>
+
+    <div class="row g-4 intelligence-grid">
+      <div class="col-lg-4">
+        <article class="intel-card glass-panel active-demo-card" data-demo-step="1">
+          <div class="card-number">01</div>
+          <span class="intel-icon cyan"><i class="bi bi-bezier2"></i></span>
+          <h3>Is the system tied correctly?</h3>
+          <p>YOLO finds the knot. DINOv2 reads its structure. A calibrated SVM flags correct or unsafe geometry.</p>
+          <div class="mini-pipeline">
+            <span>DETECT</span><i class="bi bi-arrow-right"></i>
+            <span>EMBED</span><i class="bi bi-arrow-right"></i>
+            <span>VERIFY</span>
+          </div>
+          <a href="{{ url_for('predict') }}">Try real inference <i class="bi bi-arrow-up-right"></i></a>
+        </article>
+      </div>
+      <div class="col-lg-4">
+        <article class="intel-card glass-panel" data-demo-step="2">
+          <div class="card-number">02</div>
+          <span class="intel-icon amber"><i class="bi bi-snow2"></i></span>
+          <h3>Is the terrain changing?</h3>
+          {% if demo.avalanche %}
+          <p>{{ demo.avalanche.numeric_features }} weather and snowpack signals support a research model trained across {{ demo.avalanche.samples }} dated observations.</p>
+          <div class="metric-strip">
+            <strong>{{ demo.avalanche.official_accuracy }}%</strong>
+            <span>official-only holdout accuracy<br />n={{ demo.avalanche.official_holdout_samples }}</span>
+          </div>
+          {% else %}
+          <p>The avalanche research dataset is not available in this environment.</p>
+          {% endif %}
+          <span class="boundary-note"><i class="bi bi-info-circle"></i> Decision support, never a replacement for official forecasts.</span>
+          <a href="{{ url_for('avalanche') }}">Open avalanche intelligence <i class="bi bi-arrow-up-right"></i></a>
+        </article>
+      </div>
+      <div class="col-lg-4">
+        <article class="intel-card glass-panel" data-demo-step="3">
+          <div class="card-number">03</div>
+          <span class="intel-icon green"><i class="bi bi-router"></i></span>
+          <h3>Can the team still see it?</h3>
+          <p>LiveKit carries annotated video, telemetry, and authenticated inspection commands without moving safety inference off the robot.</p>
+          <div class="network-bars">
+            <span style="height:35%"></span><span style="height:55%"></span>
+            <span style="height:75%"></span><span style="height:100%"></span>
+            <em>adaptive uplink</em>
+          </div>
+          <span class="boundary-note"><i class="bi bi-lock"></i> Allowlisted RPC commands; no arbitrary motion control.</span>
+        </article>
       </div>
     </div>
   </div>
-</div>
+</section>
 
-<!-- Quick links -->
-<div class="row g-3">
-  <div class="col-md-6">
-    <a href="{{ url_for('gallery') }}" class="card bg-secondary-subtle border-secondary text-decoration-none h-100 hover-card">
-      <div class="card-body d-flex align-items-center gap-3">
-        <i class="bi bi-images text-info fs-2"></i>
-        <div>
-          <div class="fw-semibold text-light">Browse Gallery</div>
-          <div class="small text-secondary">All {{ stats.total }} annotated images with bounding boxes</div>
+<section class="section-shell showcase-section" id="proof">
+  <div class="container-fluid px-lg-5">
+    <div class="section-heading">
+      <div>
+        <span class="micro-label text-cyan">SEE WHAT THE ROBOT SEES</span>
+        <h2>Evidence, not intuition.</h2>
+      </div>
+      <p>Bounding boxes expose exactly what enters the classifier so the operator can inspect the machine's evidence.</p>
+    </div>
+
+    <div class="row g-4 align-items-stretch">
+      {% for label, title, verdict, color in [
+        ('correct', 'Load-bearing geometry', 'CLEARED', 'green'),
+        ('incorrect', 'Unsafe rope geometry', 'HOLD', 'red')
+      ] %}
+      {% if demo.samples.get(label) %}
+      <div class="col-lg-6">
+        <div class="vision-sample glass-panel">
+          <div class="sample-image-wrap">
+            <img src="data:image/jpeg;base64,{{ demo.samples[label].thumbnail }}" alt="{{ title }}" />
+            <span class="corner top-left"></span><span class="corner top-right"></span>
+            <span class="corner bottom-left"></span><span class="corner bottom-right"></span>
+            <span class="scan-line"></span>
+          </div>
+          <div class="sample-footer">
+            <div>
+              <span class="micro-label">{{ title }}</span>
+              <strong>{{ demo.samples[label].filename.split('/')[-1] }}</strong>
+            </div>
+            <span class="verdict verdict-{{ color }}"><i class="bi bi-{% if label == 'correct' %}check{% else %}exclamation-triangle{% endif %}-circle-fill"></i> {{ verdict }}</span>
+          </div>
         </div>
       </div>
-    </a>
+      {% endif %}
+      {% endfor %}
+    </div>
   </div>
-  <div class="col-md-6">
-    <a href="{{ url_for('predict') }}" class="card bg-secondary-subtle border-secondary text-decoration-none h-100 hover-card">
-      <div class="card-body d-flex align-items-center gap-3">
-        <i class="bi bi-upload text-warning fs-2"></i>
-        <div>
-          <div class="fw-semibold text-light">Run Inference</div>
-          <div class="small text-secondary">Upload a knot photo and get a prediction</div>
+</section>
+
+<section class="section-shell architecture-section" id="architecture">
+  <div class="container-fluid px-lg-5">
+    <div class="architecture-panel glass-panel">
+      <div class="row align-items-center g-5">
+        <div class="col-lg-4">
+          <span class="micro-label text-cyan">EDGE-FIRST BY DESIGN</span>
+          <h2>The critical path never leaves the climber.</h2>
+          <p>Cloud connectivity expands awareness. It does not own the safety decision.</p>
+          <a class="btn btn-summit" href="{{ url_for('stats') }}">Explore the evidence</a>
+        </div>
+        <div class="col-lg-8">
+          <div class="architecture-flow">
+            <div class="architecture-node">
+              <i class="bi bi-camera"></i><strong>Camera</strong><span>Raw frame</span>
+            </div>
+            <i class="bi bi-chevron-right flow-arrow"></i>
+            <div class="architecture-node featured">
+              <i class="bi bi-cpu-fill"></i><strong>Edge AI</strong><span>Detect + verify</span>
+            </div>
+            <i class="bi bi-chevron-right flow-arrow"></i>
+            <div class="architecture-node">
+              <i class="bi bi-shield-fill-check"></i><strong>Safety state</strong><span>Local action</span>
+            </div>
+            <div class="flow-branch"></div>
+            <div class="architecture-node cloud-node">
+              <i class="bi bi-cloud-arrow-up"></i><strong>LiveKit</strong><span>Video + telemetry</span>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-section">
+  <div class="container-fluid px-lg-5 text-center">
+    <span class="micro-label text-cyan">THE NEXT PITCH IS LIVE</span>
+    <h2>Show the judges a decision in seconds.</h2>
+    <p>Upload a knot image, expose the detected region, and return a clear safety verdict.</p>
+    <a class="btn btn-summit btn-lg" href="{{ url_for('predict') }}">
+      Run the vision demo <i class="bi bi-arrow-right ms-2"></i>
     </a>
   </div>
-</div>
-{% endblock %}
+</section>
 
-{% block extra_js %}
-<script>
-const ctx = document.getElementById('labelChart');
-new Chart(ctx, {
-  type: 'doughnut',
-  data: {
-    labels: ['Correct', 'Incorrect'],
-    datasets: [{
-      data: [{{ stats.n_correct }}, {{ stats.n_incorrect }}],
-      backgroundColor: ['#22c55e', '#ef4444'],
-      borderColor: '#1e1e2e',
-      borderWidth: 3,
-    }]
-  },
-  options: {
-    plugins: {
-      legend: { labels: { color: '#aaa' } }
-    },
-    cutout: '60%',
-  }
-});
-</script>
+<div class="demo-toast" id="demoToast" role="status" aria-live="polite">
+  <span id="demoStep">01</span>
+  <div><strong id="demoTitle">Knot verification</strong><small id="demoCopy">The robot checks the rope system before movement.</small></div>
+  <button type="button" id="stopDemo" aria-label="Stop guided demo"><i class="bi bi-x-lg"></i></button>
+</div>
 {% endblock %}

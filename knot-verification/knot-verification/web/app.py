@@ -11,18 +11,64 @@ import csv
 import io
 import json
 import os
+import socket
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from flask import Flask, jsonify, redirect, render_template, request, send_file, url_for
 from PIL import Image, ImageDraw
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = PROJECT_ROOT.parents[1]
+AVALANCHE_METRICS_PATH = REPO_ROOT / "avalanche-data" / "output" / "model" / "metrics.json"
+AVALANCHE_PREDICTIONS_PATH = (
+    REPO_ROOT
+    / "avalanche-data"
+    / "output"
+    / "model"
+    / "holdout_predictions.csv"
+)
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import config
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
+
+# ---------------------------------------------------------------------------
+# HF bucket weight auto-download
+# ---------------------------------------------------------------------------
+
+HF_BUCKET      = "iteratehack/jobs-artifacts"
+HF_BUCKET_PATH = "knot-verification-63462c48/weights"
+_WEIGHTS = None  # populated after config is imported
+
+
+def _ensure_weights() -> None:
+    weights = {
+        config.CLASSIFIER_MODEL_OUT: f"{HF_BUCKET_PATH}/knot_classifier.joblib",
+        config.YOLO_WEIGHTS_OUT:     f"{HF_BUCKET_PATH}/knot_detector.pt",
+    }
+    missing = [local for local in weights if not local.exists()]
+    if not missing:
+        return
+    print(f"Downloading {len(missing)} weight file(s) from HF bucket {HF_BUCKET} ...")
+    try:
+        from huggingface_hub import HfFileSystem
+        fs = HfFileSystem()
+        for local_path in missing:
+            remote = weights[local_path]
+            src = f"hf://buckets/{HF_BUCKET}/{remote}"
+            print(f"  {src} -> {local_path}")
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            with fs.open(src, "rb") as r, local_path.open("wb") as w:
+                w.write(r.read())
+            print(f"  OK ({local_path.stat().st_size // 1024} KB)")
+    except Exception as exc:
+        print(f"WARNING: weight download failed: {exc}")
+
+
+_ensure_weights()
 
 # ---------------------------------------------------------------------------
 # Data loading helpers (cached at import time for speed)
@@ -32,7 +78,12 @@ def _load_annotations() -> list[dict]:
     rows = []
     with config.ANNOTATIONS_CSV.open(newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
+            # Skip rows with no filename, no box coords, or label "none"
             if not row.get("filename"):
+                continue
+            if not row.get("x1", "").strip() or not row.get("x2", "").strip():
+                continue
+            if row.get("label", "").strip().lower() == "none":
                 continue
             rows.append({
                 "filename": row["filename"],
@@ -76,6 +127,18 @@ def _get_extractor():
         from models.feature_extractor import DinoV2FeatureExtractor
         _extractor = DinoV2FeatureExtractor()
     return _extractor
+
+
+# Lazy-loaded YOLO detector
+_detector = None
+
+
+def _get_detector():
+    global _detector
+    if _detector is None:
+        from models.detector import KnotDetector
+        _detector = KnotDetector()
+    return _detector
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +186,23 @@ def _crop_thumbnail(filename: str, size: tuple[int, int] = (300, 300)) -> str:
 @app.route("/")
 def index():
     stats = _build_stats()
-    return render_template("index.html", stats=stats)
+    return render_template(
+        "index.html",
+        stats=stats,
+        demo=_build_demo_context(),
+    )
+
+
+@app.route("/avalanche")
+def avalanche():
+    avalanche_context = _build_avalanche_context()
+    if avalanche_context is None:
+        return "Avalanche model artifacts are not available", 503
+    return render_template(
+        "avalanche.html",
+        stats=_build_stats(),
+        avalanche=avalanche_context,
+    )
 
 
 @app.route("/gallery")
@@ -202,25 +281,51 @@ def predict():
             try:
                 img = Image.open(f.stream).convert("RGB")
 
-                # Save thumbnail for display
+                # Full-image thumbnail for display
                 display = img.copy()
-                display.thumbnail((640, 480), Image.LANCZOS)
+                display.thumbnail((800, 600), Image.LANCZOS)
+
+                detector_available = config.YOLO_WEIGHTS_OUT.exists()
+                box = None
+                det_conf = None
+
+                if detector_available:
+                    # Full pipeline: detect -> crop -> DINOv2 -> SVM
+                    detector = _get_detector()
+                    detection = detector.detect_best_box(img)
+                    if detection is not None:
+                        box = detection[:4]
+                        det_conf = float(detection[4])
+                        crop = detector.crop(img, box)
+                        # Draw detected box on display thumbnail
+                        scale = min(display.width / img.width, display.height / img.height)
+                        draw = ImageDraw.Draw(display)
+                        sx1 = int(box[0] * scale)
+                        sy1 = int(box[1] * scale)
+                        sx2 = int(box[2] * scale)
+                        sy2 = int(box[3] * scale)
+                        lw = max(3, (sx2 - sx1) // 40)
+                        draw.rectangle([sx1, sy1, sx2, sy2], outline="#facc15", width=lw)
+                    else:
+                        crop = img.copy()
+                        crop.thumbnail((224, 224), Image.LANCZOS)
+                else:
+                    # Classifier-only fallback
+                    crop = img.copy()
+                    crop.thumbnail((224, 224), Image.LANCZOS)
+
                 buf = io.BytesIO()
                 display.save(buf, format="JPEG", quality=85)
                 thumb_b64 = base64.b64encode(buf.getvalue()).decode()
 
-                # Crop and extract features
-                extractor = _get_extractor()
-                crop = img.copy()
-                crop.thumbnail((224, 224), Image.LANCZOS)
-
+                crop_display = crop.copy()
+                crop_display.thumbnail((300, 300), Image.LANCZOS)
                 buf2 = io.BytesIO()
-                crop.save(buf2, format="JPEG", quality=85)
+                crop_display.save(buf2, format="JPEG", quality=85)
                 crop_b64 = base64.b64encode(buf2.getvalue()).decode()
 
-                feat = extractor.extract(crop)
-                clf = _get_classifier()
-                proba = clf.predict_proba(feat)[0]
+                feat = _get_extractor().extract(crop)
+                proba = _get_classifier().predict_proba(feat)[0]
                 pred_idx = int(proba.argmax())
                 label = config.CLASSIFIER_LABELS[pred_idx]
                 confidence = float(proba[pred_idx])
@@ -230,9 +335,15 @@ def predict():
                     "confidence": round(confidence * 100, 1),
                     "prob_correct": round(float(proba[1]) * 100, 1),
                     "prob_incorrect": round(float(proba[0]) * 100, 1),
+                    "det_conf": round(det_conf * 100, 1) if det_conf is not None else None,
+                    "box": box,
+                    "no_detection": detector_available and box is None,
+                    "detector_used": detector_available,
                 }
             except Exception as exc:
+                import traceback
                 error = f"Inference failed: {exc}"
+                traceback.print_exc()
 
     return render_template(
         "predict.html",
@@ -240,6 +351,7 @@ def predict():
         error=error,
         thumb_b64=thumb_b64,
         crop_b64=crop_b64,
+        stats=_build_stats(),
     )
 
 
@@ -269,6 +381,39 @@ def api_stats():
     return jsonify(_build_stats())
 
 
+@app.route("/api/demo-status")
+def api_demo_status():
+    livekit_online = False
+    try:
+        with socket.create_connection(("127.0.0.1", 7880), timeout=0.25):
+            livekit_online = True
+    except OSError:
+        pass
+
+    stats = _build_stats()
+    return jsonify({
+        "checked_at": datetime.now(UTC).isoformat(),
+        "livekit_online": livekit_online,
+        "detector_ready": stats["detector_exists"],
+        "classifier_ready": stats["classifier_exists"],
+        "avalanche_ready": (
+            AVALANCHE_METRICS_PATH.exists()
+            and AVALANCHE_PREDICTIONS_PATH.exists()
+        ),
+        "edge_inference": "ready" if (
+            stats["detector_exists"] and stats["classifier_exists"]
+        ) else "setup_required",
+    })
+
+
+@app.route("/api/avalanche-summary")
+def api_avalanche_summary():
+    avalanche_context = _build_avalanche_context()
+    if avalanche_context is None:
+        return jsonify({"error": "Avalanche model artifacts are not available"}), 503
+    return jsonify(avalanche_context)
+
+
 @app.route("/api/predict", methods=["POST"])
 def api_predict():
     f = request.files.get("image")
@@ -276,7 +421,18 @@ def api_predict():
         return jsonify({"error": "No image provided"}), 400
     try:
         img = Image.open(f.stream).convert("RGB")
-        img.thumbnail((224, 224), Image.LANCZOS)
+        box = None
+        det_conf = None
+        if config.YOLO_WEIGHTS_OUT.exists():
+            detection = _get_detector().detect_best_box(img)
+            if detection is not None:
+                box = detection[:4]
+                det_conf = float(detection[4])
+                img = _get_detector().crop(img, box)
+            else:
+                img.thumbnail((224, 224), Image.LANCZOS)
+        else:
+            img.thumbnail((224, 224), Image.LANCZOS)
         feat = _get_extractor().extract(img)
         proba = _get_classifier().predict_proba(feat)[0]
         pred_idx = int(proba.argmax())
@@ -285,6 +441,8 @@ def api_predict():
             "confidence": float(proba[pred_idx]),
             "prob_correct": float(proba[1]),
             "prob_incorrect": float(proba[0]),
+            "detection_confidence": det_conf,
+            "box": list(box) if box is not None else None,
         })
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
@@ -293,6 +451,66 @@ def api_predict():
 # ---------------------------------------------------------------------------
 # Stats helper
 # ---------------------------------------------------------------------------
+
+def _build_avalanche_context() -> dict | None:
+    if not AVALANCHE_METRICS_PATH.exists() or not AVALANCHE_PREDICTIONS_PATH.exists():
+        return None
+
+    metrics = json.loads(AVALANCHE_METRICS_PATH.read_text(encoding="utf-8"))
+    with AVALANCHE_PREDICTIONS_PATH.open(newline="", encoding="utf-8") as file:
+        predictions = [
+            {
+                "date": row["date"],
+                "actual_numeric": int(row["actual_numeric"]),
+                "actual_label": row["actual_label"],
+                "predicted_numeric": int(row["predicted_numeric"]),
+                "predicted_label": row["predicted_label"],
+                "official": row["label_source"] == "official_sac_rating",
+            }
+            for row in csv.DictReader(file)
+        ]
+
+    official_holdout = metrics["official_only_holdout_metrics"]
+    holdout = metrics["holdout_metrics"]
+    return {
+        "samples": metrics["samples"],
+        "numeric_features": metrics["numeric_features"],
+        "official_accuracy": round(official_holdout["accuracy"] * 100, 1),
+        "official_balanced_accuracy": round(
+            official_holdout["balanced_accuracy"] * 100,
+            1,
+        ),
+        "official_holdout_samples": official_holdout["samples"],
+        "holdout_samples": holdout["samples"],
+        "holdout_balanced_accuracy": round(holdout["balanced_accuracy"] * 100, 1),
+        "date_range": metrics["date_range"],
+        "target_distribution": metrics["target_distribution"],
+        "selected_model": metrics["selected_model"].replace("_", " ").title(),
+        "predictions": predictions,
+    }
+
+
+def _build_demo_context() -> dict:
+    avalanche = _build_avalanche_context()
+
+    samples = {}
+    for label in ("correct", "incorrect"):
+        annotation = next((a for a in ANNOTATIONS if a["label"] == label), None)
+        if annotation is not None:
+            samples[label] = {
+                "filename": annotation["filename"],
+                "thumbnail": _annotated_thumbnail(
+                    annotation["filename"],
+                    size=(720, 540),
+                ),
+            }
+
+    return {
+        "avalanche": avalanche,
+        "samples": samples,
+        "livekit_room": os.getenv("LIVEKIT_ROOM", "himalaya"),
+    }
+
 
 def _build_stats() -> dict:
     n_correct = sum(1 for a in ANNOTATIONS if a["label"] == "correct")
@@ -333,4 +551,4 @@ def _build_stats() -> dict:
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"\n  Knot Verification Demo -> http://localhost:{port}\n")
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
