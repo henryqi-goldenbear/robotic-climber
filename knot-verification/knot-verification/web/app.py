@@ -32,6 +32,8 @@ def _load_annotations() -> list[dict]:
     rows = []
     with config.ANNOTATIONS_CSV.open(newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
+            if not row.get("filename"):
+                continue
             rows.append({
                 "filename": row["filename"],
                 "x1": int(row["x1"]),
