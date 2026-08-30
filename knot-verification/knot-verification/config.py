@@ -43,7 +43,9 @@ CROP_PAD_RATIO = float(os.getenv("CROP_PAD_RATIO", "0.12"))  # extra margin arou
 # ---------------------------------------------------------------------------
 # Feature extraction (DINOv2)
 # ---------------------------------------------------------------------------
-DINO_MODEL_NAME = os.getenv("DINO_MODEL_NAME", "facebook/dinov2_vits14")  # 384-d, frozen, self-supervised
+# Transformers publishes the ViT-S/14 DINOv2 checkpoint under this Hub ID.
+# ("facebook/dinov2_vits14" is not a valid Transformers repository.)
+DINO_MODEL_NAME = os.getenv("DINO_MODEL_NAME", "facebook/dinov2-small")  # 384-d, frozen, self-supervised
 DINO_IMG_SIZE = int(os.getenv("DINO_IMG_SIZE", "224"))
 DINO_FEATURE_DIM = 384
 

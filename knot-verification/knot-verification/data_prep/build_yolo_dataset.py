@@ -39,9 +39,19 @@ def build_split(df, filenames, split_name: str):
             continue
         with Image.open(src) as im:
             img_w, img_h = im.size
-        shutil.copy(src, img_out / row["filename"])
+        # Filenames in annotations.csv are paths relative to raw_data/images
+        # (for example, "kaggle_good/Loose/IMG_7059.jpg").  Preserve that
+        # layout in both YOLO directories and create the matching parents.
+        # YOLO resolves labels by replacing "images" with "labels", so the
+        # relative paths must remain identical.
+        image_out = img_out / row["filename"]
+        label_out = lbl_out / (Path(row["filename"]).with_suffix(".txt"))
+        image_out.parent.mkdir(parents=True, exist_ok=True)
+        label_out.parent.mkdir(parents=True, exist_ok=True)
+
+        shutil.copy2(src, image_out)
         label_txt = yolo_line(row.x1, row.y1, row.x2, row.y2, img_w, img_h)
-        (lbl_out / (Path(row["filename"]).stem + ".txt")).write_text(label_txt + "\n")
+        label_out.write_text(label_txt + "\n")
         written += 1
     print(f"  {split_name}: {written} images written to {img_out}")
 

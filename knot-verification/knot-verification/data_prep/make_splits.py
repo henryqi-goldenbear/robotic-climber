@@ -21,7 +21,11 @@ import pandas as pd
 from PIL import Image
 from sklearn.model_selection import train_test_split
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+# Add the project root to sys.path dynamically
+project_root = Path(__file__).resolve().parents[1]
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 import config
 
 

@@ -55,6 +55,16 @@ def end_to_end_val_report():
     print("\n=== End-to-end pipeline on held-out validation images ===")
     if n_missed:
         print(f"  ({n_missed} val images had no detection above conf={config.YOLO_CONF_THRES})")
+    detected = len(y_true)
+    total = len(split["val"])
+    print(f"  Detection rate: {detected}/{total} ({detected / total:.1%})")
+    if not y_true:
+        print(
+            "  No validation images reached the detector confidence threshold; "
+            "classifier metrics are unavailable. Lower YOLO_CONF_THRES to "
+            "diagnose low-confidence detections, then inspect detector training."
+        )
+        return
     print(classification_report(y_true, y_pred, target_names=["Incorrect", "Correct"]))
     print("Confusion matrix:\n", confusion_matrix(y_true, y_pred))
 
