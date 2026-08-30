@@ -41,11 +41,16 @@ def end_to_end_val_report():
     pipeline = KnotInspectionPipeline()
     y_true, y_pred = [], []
     n_missed = 0
+    background_total = background_rejected = 0
 
     for fname in split["val"]:
         img_path = config.RAW_IMAGES_DIR / fname
         image = Image.open(img_path).convert("RGB")
         result = pipeline.predict(image)
+        if df.loc[fname, "is_background"]:
+            background_total += 1
+            background_rejected += result.label is None
+            continue
         if result.label is None:
             n_missed += 1
             continue
@@ -56,8 +61,11 @@ def end_to_end_val_report():
     if n_missed:
         print(f"  ({n_missed} val images had no detection above conf={config.YOLO_CONF_THRES})")
     detected = len(y_true)
-    total = len(split["val"])
+    total = len(y_true) + n_missed
     print(f"  Detection rate: {detected}/{total} ({detected / total:.1%})")
+    if background_total:
+        print(f"  Background rejection: {background_rejected}/{background_total} "
+              f"({background_rejected / background_total:.1%})")
     if not y_true:
         print(
             "  No validation images reached the detector confidence threshold; "

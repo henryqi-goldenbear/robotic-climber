@@ -50,8 +50,13 @@ def build_split(df, filenames, split_name: str):
         label_out.parent.mkdir(parents=True, exist_ok=True)
 
         shutil.copy2(src, image_out)
-        label_txt = yolo_line(row.x1, row.y1, row.x2, row.y2, img_w, img_h)
-        label_out.write_text(label_txt + "\n")
+        # An empty YOLO label file marks an image as background: it has no
+        # knot box and trains the detector to reject empty frames.
+        if row.is_background:
+            label_out.write_text("")
+        else:
+            label_txt = yolo_line(row.x1, row.y1, row.x2, row.y2, img_w, img_h)
+            label_out.write_text(label_txt + "\n")
         written += 1
     print(f"  {split_name}: {written} images written to {img_out}")
 

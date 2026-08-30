@@ -57,7 +57,8 @@ def main() -> None:
 
     split = json.loads(config.SPLIT_FILE.read_text())
     df = load_annotations().set_index("filename")
-    val_files = split["val"]
+    val_files = [filename for filename in split["val"] if not df.loc[filename, "is_background"]]
+    background_count = len(split["val"]) - len(val_files)
 
     print("\n=== Detector confidence sweep ===")
     detector = KnotDetector(conf_thres=0.001)
@@ -90,6 +91,8 @@ def main() -> None:
 
     scores = np.array(best_scores)
     print(f"Validation images: {len(scores)}")
+    if background_count:
+        print(f"(YOLO metrics above include {background_count} held-out no-knot background images.)")
     print(f"Best-confidence range: {scores.min():.4f}–{scores.max():.4f}; median {np.median(scores):.4f}")
     for threshold in (0.001, 0.05, 0.10, 0.35):
         print(f"  >= {threshold:.3f}: {(scores >= threshold).sum()}/{len(scores)}")

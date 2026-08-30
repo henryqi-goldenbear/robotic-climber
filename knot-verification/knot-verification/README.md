@@ -40,10 +40,13 @@ knot-verification/
 ```
 filename,x1,y1,x2,y2,label
 figure8_0001.jpg,142,88,410,360,correct
+none/empty_frame_0001.jpg,,,,,none
 ```
 
 `x1,y1,x2,y2` are the knot's bounding box in absolute pixels; `label` is
-`correct`/`incorrect` (or `1`/`0`). If your Kaggle dataset ships a different
+`correct`/`incorrect` (or `1`/`0`). For a no-knot frame, use `label=none` and
+leave all four box columns blank; it becomes an empty YOLO label file and is
+used only for detector training/evaluation. If your Kaggle dataset ships a different
 schema (separate label files, COCO JSON, etc.), edit
 `data_prep/make_splits.py:load_annotations()` — everything downstream reads
 from that one function, so it's the only place you need to adapt.
