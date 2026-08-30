@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Knot Verification — Overview{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+  <div class="col-12">
+    <h1 class="fw-bold mb-1">
+      <i class="bi bi-shield-check text-success me-2"></i>Knot Verification Pipeline
+    </h1>
+    <p class="text-secondary mb-0">
+      Climbing-knot safety classifier · YOLOv10-N detect &amp; crop → DINOv2-Small frozen features → Linear SVM
+    </p>
+  </div>
+</div>
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card bg-secondary-subtle border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="display-5 fw-bold text-info">{{ stats.total }}</div>
+        <div class="text-secondary small mt-1">Total images</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card bg-secondary-subtle border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="display-5 fw-bold text-success">{{ stats.n_correct }}</div>
+        <div class="text-secondary small mt-1">Correct knots</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card bg-secondary-subtle border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="display-5 fw-bold text-danger">{{ stats.n_incorrect }}</div>
+        <div class="text-secondary small mt-1">Incorrect knots</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card bg-secondary-subtle border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="display-5 fw-bold text-warning">{{ stats.n_val }}</div>
+        <div class="text-secondary small mt-1">Validation images</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pipeline diagram + label doughnut -->
+<div class="row g-4 mb-4">
+  <div class="col-md-7">
+    <div class="card bg-secondary-subtle border-secondary h-100">
+      <div class="card-header fw-semibold border-secondary">
+        <i class="bi bi-diagram-3 me-2"></i>Pipeline
+      </div>
+      <div class="card-body">
+        <div class="d-flex align-items-center flex-wrap gap-2 my-2 justify-content-center">
+          {% set stages = [
+            ('bi-camera', 'Frame', 'secondary'),
+            ('bi-arrow-right', '', 'secondary'),
+            ('bi-bounding-box', 'YOLOv10-N\nDetect + Crop', 'primary'),
+            ('bi-arrow-right', '', 'secondary'),
+            ('bi-grid-3x3-gap', 'DINOv2-Small\nFeatures', 'info'),
+            ('bi-arrow-right', '', 'secondary'),
+            ('bi-cpu', 'Linear SVM\nClassify', 'warning'),
+            ('bi-arrow-right', '', 'secondary'),
+            ('bi-check-circle', 'Correct / Incorrect', 'success'),
+          ] %}
+          {% for icon, label, color in stages %}
+            {% if label == '' %}
+              <i class="bi {{ icon }} text-{{ color }}"></i>
+            {% else %}
+              <div class="text-center px-2">
+                <div class="rounded p-2 border border-{{ color }} mb-1 bg-dark">
+                  <i class="bi {{ icon }} text-{{ color }} fs-4"></i>
+                </div>
+                <div class="small text-{{ color }}" style="white-space:pre-line;line-height:1.2">{{ label }}</div>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+
+        <hr class="border-secondary" />
+        <div class="row text-center small text-secondary">
+          <div class="col">
+            <div class="fw-semibold text-light">Detector</div>
+            {% if stats.detector_exists %}
+              <span class="badge bg-success">weights loaded</span>
+            {% else %}
+              <span class="badge bg-secondary">not trained yet</span>
+            {% endif %}
+          </div>
+          <div class="col">
+            <div class="fw-semibold text-light">Classifier</div>
+            {% if stats.classifier_exists %}
+              <span class="badge bg-success">weights loaded</span>
+            {% else %}
+              <span class="badge bg-secondary">not trained yet</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-5">
+    <div class="card bg-secondary-subtle border-secondary h-100">
+      <div class="card-header fw-semibold border-secondary">
+        <i class="bi bi-pie-chart me-2"></i>Label distribution
+      </div>
+      <div class="card-body d-flex align-items-center justify-content-center">
+        <canvas id="labelChart" style="max-height:220px"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick links -->
+<div class="row g-3">
+  <div class="col-md-6">
+    <a href="{{ url_for('gallery') }}" class="card bg-secondary-subtle border-secondary text-decoration-none h-100 hover-card">
+      <div class="card-body d-flex align-items-center gap-3">
+        <i class="bi bi-images text-info fs-2"></i>
+        <div>
+          <div class="fw-semibold text-light">Browse Gallery</div>
+          <div class="small text-secondary">All {{ stats.total }} annotated images with bounding boxes</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-6">
+    <a href="{{ url_for('predict') }}" class="card bg-secondary-subtle border-secondary text-decoration-none h-100 hover-card">
+      <div class="card-body d-flex align-items-center gap-3">
+        <i class="bi bi-upload text-warning fs-2"></i>
+        <div>
+          <div class="fw-semibold text-light">Run Inference</div>
+          <div class="small text-secondary">Upload a knot photo and get a prediction</div>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const ctx = document.getElementById('labelChart');
+new Chart(ctx, {
+  type: 'doughnut',
+  data: {
+    labels: ['Correct', 'Incorrect'],
+    datasets: [{
+      data: [{{ stats.n_correct }}, {{ stats.n_incorrect }}],
+      backgroundColor: ['#22c55e', '#ef4444'],
+      borderColor: '#1e1e2e',
+      borderWidth: 3,
+    }]
+  },
+  options: {
+    plugins: {
+      legend: { labels: { color: '#aaa' } }
+    },
+    cutout: '60%',
+  }
+});
+</script>
+{% endblock %}

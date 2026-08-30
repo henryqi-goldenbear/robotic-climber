@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Run Inference · Knot Verification{% endblock %}
+
+{% block content %}
+<h2 class="fw-bold mb-1"><i class="bi bi-cpu text-warning me-2"></i>Run Inference</h2>
+<p class="text-secondary mb-4">Upload a knot photo. The classifier returns a Correct / Incorrect prediction.</p>
+
+<div class="row g-4">
+  <!-- Upload form -->
+  <div class="col-md-5">
+    <div class="card bg-secondary-subtle border-secondary">
+      <div class="card-header fw-semibold border-secondary">Upload image</div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data" id="predictForm">
+          <div class="mb-3">
+            <label class="form-label text-secondary small">Select a knot photo (JPG / PNG)</label>
+            <input type="file" name="image" id="imageInput" accept="image/*"
+                   class="form-control bg-dark text-light border-secondary" required />
+          </div>
+
+          <!-- Preview before submit -->
+          <div id="previewBox" class="mb-3 d-none text-center">
+            <img id="previewImg" src="#" alt="preview"
+                 class="img-fluid rounded" style="max-height:240px" />
+          </div>
+
+          <button type="submit" class="btn btn-warning w-100" id="submitBtn">
+            <i class="bi bi-play-circle me-2"></i>Run prediction
+          </button>
+        </form>
+
+        {% if error %}
+        <div class="alert alert-danger mt-3 mb-0">
+          <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Pipeline note -->
+    <div class="card bg-secondary-subtle border-secondary mt-3">
+      <div class="card-body small text-secondary">
+        <i class="bi bi-info-circle me-1 text-info"></i>
+        <strong class="text-light">Note:</strong>
+        The detector weights (<code>knot_detector.pt</code>) are not yet trained.
+        This demo runs the <strong>DINOv2 + SVM classifier</strong> directly on the uploaded image
+        (resized to 224 × 224), skipping the YOLO crop step.
+        Train the full pipeline with <code>python run_training_pipeline.py</code> to enable
+        end-to-end detection + classification.
+      </div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="col-md-7">
+    {% if result %}
+    <div class="card bg-secondary-subtle border-{% if result.label=='Correct' %}success{% else %}danger{% endif %} h-100">
+      <div class="card-header fw-semibold border-secondary">Prediction result</div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-6">
+            <div class="text-center mb-3">
+              {% if result.label == 'Correct' %}
+                <div class="display-3 text-success"><i class="bi bi-check-circle-fill"></i></div>
+                <div class="fs-3 fw-bold text-success mt-2">{{ result.label }}</div>
+              {% else %}
+                <div class="display-3 text-danger"><i class="bi bi-x-circle-fill"></i></div>
+                <div class="fs-3 fw-bold text-danger mt-2">{{ result.label }}</div>
+              {% endif %}
+              <div class="text-secondary small">{{ result.confidence }}% confidence</div>
+            </div>
+
+            <!-- Probability bars -->
+            <div class="mb-2">
+              <div class="d-flex justify-content-between small mb-1">
+                <span class="text-success">Correct</span>
+                <span class="text-success">{{ result.prob_correct }}%</span>
+              </div>
+              <div class="progress" style="height:10px">
+                <div class="progress-bar bg-success" style="width:{{ result.prob_correct }}%"></div>
+              </div>
+            </div>
+            <div class="mb-2">
+              <div class="d-flex justify-content-between small mb-1">
+                <span class="text-danger">Incorrect</span>
+                <span class="text-danger">{{ result.prob_incorrect }}%</span>
+              </div>
+              <div class="progress" style="height:10px">
+                <div class="progress-bar bg-danger" style="width:{{ result.prob_incorrect }}%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-6 text-center">
+            {% if thumb_b64 %}
+            <div class="mb-2">
+              <div class="small text-secondary mb-1">Uploaded image</div>
+              <img src="data:image/jpeg;base64,{{ thumb_b64 }}"
+                   class="img-fluid rounded border border-secondary"
+                   style="max-height:200px" alt="uploaded" />
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="d-flex align-items-center justify-content-center h-100 text-secondary">
+      <div class="text-center">
+        <i class="bi bi-arrow-left-circle fs-1 mb-3 d-block"></i>
+        Upload an image to see the prediction here.
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Sample images shortcut -->
+<div class="mt-4">
+  <div class="text-secondary small mb-2">
+    <i class="bi bi-lightbulb me-1 text-warning"></i>
+    Don't have an image? Browse the <a href="{{ url_for('gallery') }}" class="text-info">gallery</a>
+    and click any image to inspect it, then download and upload it here.
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('imageInput').addEventListener('change', function () {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('previewImg').src = e.target.result;
+    document.getElementById('previewBox').classList.remove('d-none');
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('predictForm').addEventListener('submit', function () {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Running…';
+});
+</script>
+{% endblock %}

@@ -102,9 +102,9 @@ def main() -> None:
 
     # Regenerate these in the Linux mount. In particular, data.yaml must not
     # retain an absolute Windows path created by a local dataset build.
-    #run("data_prep/make_splits.py")
-    #run("data_prep/build_yolo_dataset.py")
-    #run("train_detector.py")
+    run("data_prep/make_splits.py")
+    run("data_prep/build_yolo_dataset.py")
+    run("train_detector.py")
     run("data_prep/build_classifier_dataset.py")
     run("train_classifier.py")
     run("evaluate.py")

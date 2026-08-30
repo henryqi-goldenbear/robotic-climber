@@ -1,0 +1,45 @@
+/* Dark theme refinements */
+body {
+  min-height: 100vh;
+}
+
+.hover-card {
+  transition: border-color 0.15s, transform 0.15s;
+}
+.hover-card:hover {
+  border-color: #6ee7b7 !important;
+  transform: translateY(-2px);
+}
+
+/* Custom col width for 5-across stat cards */
+.col-lg-2-4 {
+  flex: 0 0 auto;
+  width: 20%;
+}
+@media (max-width: 992px) {
+  .col-lg-2-4 { width: 33.33%; }
+}
+@media (max-width: 576px) {
+  .col-lg-2-4 { width: 50%; }
+}
+
+/* Gallery card img consistent crop */
+.card-img-top {
+  border-bottom: 1px solid #374151;
+}
+
+/* Progress bars */
+.progress {
+  background-color: #374151;
+}
+
+/* Monospace paths */
+.font-monospace {
+  font-size: 0.78rem;
+}
+
+/* Nav active indicator */
+.navbar .nav-link.active {
+  color: #22c55e !important;
+  font-weight: 600;
+}
